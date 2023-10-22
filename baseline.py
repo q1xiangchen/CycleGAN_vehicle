@@ -20,12 +20,12 @@ def path_generator(type):
     labels = []
     # get the root path of the dataset
     type_root = os.path.join(root, type)
-    finegrained_labels = os.listdir(type_root)
+    files = os.listdir(type_root)
     # loop each label
-    for label in finegrained_labels:
+    for label in files:
         label_path = os.path.join(type_root, label)
         paths.append(label_path)
-        labels.append(int(label.split("_")[0])) 
+        labels.append(int(label.split("_")[0])-1) 
     return paths, labels
 
 
@@ -81,13 +81,12 @@ def train(
         criterion
 ):
     best_acc = 0.0
-    # best_model = copy.deepcopy(model.state_dict())
 
     for epoch in range(n_epoch):
         model.train()
-        train_loss_clf = AverageMeter()
-        train_loss_transfer = AverageMeter()
-        train_loss_total = AverageMeter()
+        train_loss_clf = 0.0
+        train_loss_transfer = 0.0
+        train_loss_total = 0.0
 
         iter_src, iter_tar = iter(src_loader), iter(tar_loader)
 
@@ -96,26 +95,31 @@ def train(
             data_tar, _ = next(iter_tar)
             data_src, label_src = data_src.to(device), label_src.to(device)
             data_tar = data_tar.to(device)
-
-            out_s, clf_s = model(data_src)
-            out_t, _ = model(data_tar)
-
-            clf_loss = criterion(clf_s, label_src)
-            transfer_loss = coral(out_s, out_t)
-            loss = clf_loss + transfer_loss_weight * transfer_loss
-            
+        
             optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+            with torch.set_grad_enabled(True):
+                feat_src, clf_src = model(data_src)
+                feat_tar, clf_tar = model(data_tar)
 
-            train_loss_clf.update(clf_loss.item())
-            train_loss_transfer.update(transfer_loss.item())
-            train_loss_total.update(loss.item())
+                clf_loss = criterion(clf_src, label_src)
+                transfer_loss = coral(feat_src, feat_tar)
+                loss = clf_loss + transfer_loss_weight * transfer_loss
+                loss.backward()
+                optimizer.step()
+
+
+            train_loss_clf += clf_loss.item()
+            train_loss_transfer += transfer_loss.item()
+            train_loss_total += loss.item()
+
+        train_loss_clf /= batch_size
+        train_loss_transfer /= batch_size
+        train_loss_total /= batch_size
 
         # format in 4 decimal places
-        log = f"Epoch: {epoch+1}/{n_epoch}, train_loss_clf: {train_loss_clf.avg:.4f}, " \
-              f"train_loss_transfer: {train_loss_transfer.avg:.4f}, " \
-              f"train_loss_total: {train_loss_total.avg:.4f}, "
+        log = f"Epoch: {epoch+1}/{n_epoch}, train_loss_clf: {train_loss_clf:.4f}, " \
+              f"train_loss_transfer: {train_loss_transfer:.4f}, " \
+              f"train_loss_total: {train_loss_total:.4f}, "
         
         # test
         test_acc, test_loss = test(model, tar_test_loader)
@@ -128,22 +132,38 @@ def train(
     return model
 
 
-def test(model, target_test_loader):
+# def test(model, target_test_loader):
+#     model.eval()
+#     test_loss = AverageMeter()
+#     correct = 0
+#     criterion = torch.nn.CrossEntropyLoss()
+#     len_target_dataset = len(target_test_loader.dataset)
+#     with torch.no_grad():
+#         for data, target in target_test_loader:
+#             data, target = data.to(device), target.to(device)
+#             _, clf = model.forward(data)
+#             loss = criterion(clf, target)
+#             test_loss.update(loss.item())
+#             pred = torch.max(clf, 1)[1]
+#             correct += torch.sum(pred == target)
+#     acc = 100.0 * correct / len_target_dataset
+#     return acc, test_loss.avg
+
+
+def test(model, test_loader):
     model.eval()
-    test_loss = AverageMeter()
+    running_loss = 0.0
     correct = 0
-    criterion = torch.nn.CrossEntropyLoss()
-    len_target_dataset = len(target_test_loader.dataset)
-    with torch.no_grad():
-        for data, target in target_test_loader:
-            data, target = data.to(device), target.to(device)
-            _, clf = model.forward(data)
-            loss = criterion(clf, target)
-            test_loss.update(loss.item())
-            pred = torch.max(clf, 1)[1]
-            correct += torch.sum(pred == target)
-    acc = 100.0 * correct / len_target_dataset
-    return acc, test_loss.avg
+    for inputs, labels in test_loader:
+        inputs, labels = inputs.to(device), labels.to(device)
+        _, outputs = model(inputs)
+        loss = criterion(outputs, labels)
+        running_loss += loss.item() * inputs.size(0)
+        _, preds = torch.max(outputs, 1)
+        correct += torch.sum(preds == labels.data)
+    epoch_loss = running_loss / len(test_loader.dataset)
+    epoch_acc = 100.0 * correct / len(test_loader.dataset)
+    return epoch_acc, epoch_loss
 
 
 class VehicleDataset(Dataset):
@@ -196,7 +216,8 @@ if __name__ == "__main__":
     lr = 1e-3
     output_dim = 1362
     transfer_loss_weight = 0
-    root = "data/VehicleX/ReID Task/"
+    # root = "data/VehicleX/ReID Task/"
+    root = "data/VehicleX/Classification Task"
     set_random_seed(seed)
 
     # parser.add_argument("--seed", type=int, default=0)
@@ -206,8 +227,8 @@ if __name__ == "__main__":
     # args = parser.parse_args()
 
     src_data = VehicleDataset("train", transforms_src)
-    tar_data = VehicleDataset("gallery", transforms_tar)
-    tar_test_data = VehicleDataset("query", transforms_tar)
+    tar_data = VehicleDataset("val", transforms_tar)
+    tar_test_data = VehicleDataset("test", transforms_tar)
 
     src_loader = DataLoader(src_data, batch_size, shuffle=True, num_workers=4)
     tar_loader = DataLoader(tar_data, batch_size, shuffle=True, num_workers=4)
