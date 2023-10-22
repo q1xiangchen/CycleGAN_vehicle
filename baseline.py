@@ -1,14 +1,11 @@
 import os
-import matplotlib.pyplot as plt
-import cv2
-import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
-import torchvision.transforms as T
 import torchvision.models as M
 import logging
 import time
+from PIL import Image
 
 from utils import (
     set_random_seed,
@@ -160,7 +157,7 @@ class VehicleDataset(Dataset):
         return len(self.labels)
 
     def __getitem__(self, idx):
-        feature = cv2.imread(self.paths[idx])
+        feature = Image.open(self.paths[idx])
         label = self.labels[idx]
         if self.transform:
             feature = self.transform(feature)
@@ -170,7 +167,9 @@ class VehicleDataset(Dataset):
 class Baseline_ResNet50(nn.Module):
     def __init__(self, output_dim):
         super(Baseline_ResNet50, self).__init__()
-        self.resnet50 = M.resnet50(weights=M.ResNet50_Weights.DEFAULT)
+        self.resnet50 = M.resnet50(weights=None)
+        self.resnet50.load_state_dict(torch.load('./ckpt/resnet50-11ad3fa6.pth'))
+
         self.feature_extractor = nn.Sequential(*list(self.resnet50.children())[:-1])
         feat_dim = self.resnet50.fc.in_features
         self.clf_fc = nn.Linear(feat_dim, output_dim)
