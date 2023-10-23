@@ -6,7 +6,7 @@ from PIL import Image
 
 transforms =  T.Compose(
     [
-        T.Resize([288,288], interpolation=3),
+        T.Resize([288,288], T.InterpolationMode.BICUBIC),
         T.RandomHorizontalFlip(),
         T.RandomCrop((224,224)),
         T.ToTensor(),
@@ -17,7 +17,7 @@ transforms =  T.Compose(
 
 transforms_test =  T.Compose(
     [
-        T.Resize((224,224)),
+        T.Resize([224,224], T.InterpolationMode.BICUBIC),
         T.ToTensor(),
         T.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
     ]

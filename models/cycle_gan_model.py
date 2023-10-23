@@ -26,18 +26,16 @@ def weights_init_kaiming(m):
 
 def weights_init_classifier(m):
     classname = m.__class__.__name__
-    if classname.find("Linear") != -1:
-        nn.init.normal_(m.weight.data, std=0.001)
-        nn.init.constant_(m.bias.data, 0.0)
-
-
-def conv_norm_act(in_dim, out_dim, kernel_size, stride, padding=0, 
-                  norm=functools.partial(nn.InstanceNorm2d, affine=False)):
-    layers = []
-    layers.append(nn.Conv2d(in_dim, out_dim, kernel_size, stride, padding, bias=False))
-    layers.append(norm(out_dim))
-    layers.append(nn.ReLU())
-    return nn.Sequential(*layers)
+    if classname.find('Linear') != -1:
+        nn.init.normal(m.weight.data, std=0.001)
+        nn.init.constant(m.bias.data, 0.0)
+        
+def conv_norm_act(in_dim, out_dim, kernel_size, stride, padding=0,
+                  norm = functools.partial(nn.InstanceNorm2d, affine=False), relu=nn.ReLU):
+    return nn.Sequential(
+        nn.Conv2d(in_dim, out_dim, kernel_size, stride, padding, bias=False),
+        norm(out_dim),
+        relu())
 
 
 def dconv_norm_act(in_dim, out_dim, kernel_size, stride, padding=0, output_padding=0, 
@@ -54,16 +52,15 @@ class Discriminator(nn.Module):
 
     def __init__(self, dim=64):
         super(Discriminator, self).__init__()
-        
+
         lrelu = functools.partial(nn.LeakyReLU, negative_slope=0.2)
         conv_bn_lrelu = functools.partial(conv_norm_act, relu=lrelu)
 
         self.ls = nn.Sequential(nn.Conv2d(3, dim, 4, 2, 1), nn.LeakyReLU(0.2),
-                                conv_bn_lrelu(dim, dim * 2, 4, 2, 1),
+                                conv_bn_lrelu(dim * 1, dim * 2, 4, 2, 1),
                                 conv_bn_lrelu(dim * 2, dim * 4, 4, 2, 1),
-                                conv_bn_lrelu(dim * 4, dim * 8, 4, 1, (1, 2)),
+                                conv_bn_lrelu(dim * 4, dim * 8, 4, 1, (1, 2)),  #1×512×32*32
                                 nn.Conv2d(dim * 8, 1, 4, 1, (2, 1)))
-        
     def forward(self, x):
         return self.ls(x)
     
