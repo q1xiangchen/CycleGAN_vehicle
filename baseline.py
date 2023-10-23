@@ -1,75 +1,21 @@
 import os
 import torch
 import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import DataLoader
 import torchvision.models as M
 import logging
 import time
-from PIL import Image
+import argparse
 
-from utils import (
+from utils.utils import (
     set_random_seed,
     AverageMeter,
-    transforms_src,
-    transforms_tar
 )
-
-
-def path_generator(type):
-    paths = []
-    labels = []
-    # get the root path of the dataset
-    type_root = os.path.join(root, type)
-    files = os.listdir(type_root)
-    # loop each label
-    for label in files:
-        label_path = os.path.join(type_root, label)
-        paths.append(label_path)
-        labels.append(int(label.split("_")[0])-1) 
-    return paths, labels
-
-
-def coral(source, target):
-    # my implementation of the original paper, the code is different, but the result is the same
-    d = source.data.shape[1]
-    ns, nt = source.data.shape[0], target.data.shape[0]
-    # source covariance
-    # calculating D'D for source and target
-    cov_s = source.T @ source
-    cov_t = target.T @ target
-
-    # divide D'D by (num-1)
-    cov_s = cov_s / (ns - 1)
-    cov_t = cov_t / (nt - 1)
-
-    # identity is a row vector of 1s
-    identity_s = torch.ones((1, ns), device=source.device)
-    identity_t = torch.ones((1, nt), device=target.device)
-
-    # calculate the mean of D per column
-    mean_s = identity_s @ source
-    mean_t = identity_t @ target
-
-    # calculate the squared mean
-    square_mean_s = mean_s.T @ mean_s
-    square_mean_t = mean_t.T @ mean_t
-
-    # divide squared mean by (num*(num-1))
-    square_mean_s = square_mean_s / (ns * (ns - 1))
-    square_mean_t = square_mean_t / (nt * (nt - 1))
-
-    # cov is (1/(num-1))*(D'*D) - (1/(num*(num-1)))*(mean)^T*(mean)
-    cov_s = cov_s - square_mean_s
-    cov_t = cov_t - square_mean_t
-
-    # cov_s - cov_t
-    diff = cov_s - cov_t
-
-    # loss = (1/4)*(1/(dim*dim))*square_norm
-    square_norm = torch.sum(torch.multiply(diff, diff))
-    loss = square_norm / (4 * d * d)
-
-    return loss
+from utils.data_loader import (
+    VehicleDataset,
+    transforms_src,
+    transforms_tar,
+)
 
 
 def train(
@@ -78,48 +24,48 @@ def train(
         tar_loader, 
         tar_test_loader, 
         optimizer,
-        criterion
+        criterion,
+        args
 ):
     best_acc = 0.0
 
-    for epoch in range(n_epoch):
+    for epoch in range(args.n_epoch):
         model.train()
-        train_loss_clf = 0.0
-        train_loss_transfer = 0.0
-        train_loss_total = 0.0
+        train_loss_clf = AverageMeter()
+        train_loss_total = AverageMeter()
 
-        iter_src, iter_tar = iter(src_loader), iter(tar_loader)
+        # map the source and target data to the same length
+        iter_src = iter(src_loader)
+        iter_tar = iter(tar_loader)
 
-        for _ in range(batch_size):
+        for _ in range(args.batch_size):
             data_src, label_src = next(iter_src)
-            data_tar, _ = next(iter_tar)
+            try:
+                data_tar, _ = next(iter_tar)
+            except StopIteration:
+                iter_tar = iter(tar_loader)
+                data_tar, _ = next(iter_tar)
+
             data_src, label_src = data_src.to(device), label_src.to(device)
             data_tar = data_tar.to(device)
         
             optimizer.zero_grad()
             with torch.set_grad_enabled(True):
                 feat_src, clf_src = model(data_src)
-                feat_tar, clf_tar = model(data_tar)
+                feat_tar, _ = model(data_tar)
 
                 clf_loss = criterion(clf_src, label_src)
-                transfer_loss = coral(feat_src, feat_tar)
-                loss = clf_loss + transfer_loss_weight * transfer_loss
+                loss = clf_loss
                 loss.backward()
                 optimizer.step()
 
 
-            train_loss_clf += clf_loss.item()
-            train_loss_transfer += transfer_loss.item()
-            train_loss_total += loss.item()
-
-        train_loss_clf /= batch_size
-        train_loss_transfer /= batch_size
-        train_loss_total /= batch_size
+            train_loss_clf.update(clf_loss.item())
+            train_loss_total.update(loss.item())
 
         # format in 4 decimal places
-        log = f"Epoch: {epoch+1}/{n_epoch}, train_loss_clf: {train_loss_clf:.4f}, " \
-              f"train_loss_transfer: {train_loss_transfer:.4f}, " \
-              f"train_loss_total: {train_loss_total:.4f}, "
+        log = f"Epoch: {epoch+1}/{args.n_epoch}, train_loss_clf: {train_loss_clf.avg:.4f}, " \
+              f"train_loss_total: {train_loss_total.avg:.4f}, "
         
         # test
         test_acc, test_loss = test(model, tar_test_loader)
@@ -132,56 +78,19 @@ def train(
     return model
 
 
-# def test(model, target_test_loader):
-#     model.eval()
-#     test_loss = AverageMeter()
-#     correct = 0
-#     criterion = torch.nn.CrossEntropyLoss()
-#     len_target_dataset = len(target_test_loader.dataset)
-#     with torch.no_grad():
-#         for data, target in target_test_loader:
-#             data, target = data.to(device), target.to(device)
-#             _, clf = model.forward(data)
-#             loss = criterion(clf, target)
-#             test_loss.update(loss.item())
-#             pred = torch.max(clf, 1)[1]
-#             correct += torch.sum(pred == target)
-#     acc = 100.0 * correct / len_target_dataset
-#     return acc, test_loss.avg
-
-
 def test(model, test_loader):
     model.eval()
-    running_loss = 0.0
+    running_loss = AverageMeter()
     correct = 0
     for inputs, labels in test_loader:
         inputs, labels = inputs.to(device), labels.to(device)
         _, outputs = model(inputs)
         loss = criterion(outputs, labels)
-        running_loss += loss.item() * inputs.size(0)
+        running_loss.update(loss.item())
         _, preds = torch.max(outputs, 1)
         correct += torch.sum(preds == labels.data)
-    epoch_loss = running_loss / len(test_loader.dataset)
     epoch_acc = 100.0 * correct / len(test_loader.dataset)
-    return epoch_acc, epoch_loss
-
-
-class VehicleDataset(Dataset):
-    def __init__(self, type, transform=None):
-        paths, labels = path_generator(type)
-        self.paths = paths
-        self.labels = labels
-        self.transform = transform
-
-    def __len__(self):
-        return len(self.labels)
-
-    def __getitem__(self, idx):
-        feature = Image.open(self.paths[idx])
-        label = self.labels[idx]
-        if self.transform:
-            feature = self.transform(feature)
-        return feature, label
+    return epoch_acc, running_loss.avg
 
 
 class Baseline_ResNet50(nn.Module):
@@ -209,43 +118,56 @@ if __name__ == "__main__":
     else:
         device = "cpu"
 
+    # *****************************************************
     # hyper parameters
-    seed = 42
-    n_epoch = 100
-    batch_size = 32
-    lr = 1e-3
     output_dim = 1362
     transfer_loss_weight = 0
-    # root = "data/VehicleX/ReID Task/"
-    root = "data/VehicleX/Classification Task"
-    set_random_seed(seed)
 
-    # parser.add_argument("--seed", type=int, default=0)
-    # parser.add_argument("--batch_size", type=int, default=32)
-    # parser.add_argument("--n_epoch", type=int, default=20)
-    # parser.add_argument("--lr", type=float, default=1e-3)
-    # args = parser.parse_args()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--batch_size", type=int, default=64)
+    parser.add_argument("--n_epoch", type=int, default=100)
+    parser.add_argument("--lr", type=float, default=1e-3)
+    parser.add_argument("--optimizer", type=str, default="Adam")
+    parser.add_argument("--criterion", type=str, default="CrossEntropyLoss")
+    args = parser.parse_args()
+    # *****************************************************
 
+    set_random_seed(args.seed)
+
+    # data loader
     src_data = VehicleDataset("train", transforms_src)
     tar_data = VehicleDataset("val", transforms_tar)
     tar_test_data = VehicleDataset("test", transforms_tar)
 
-    src_loader = DataLoader(src_data, batch_size, shuffle=True, num_workers=4)
-    tar_loader = DataLoader(tar_data, batch_size, shuffle=True, num_workers=4)
-    tar_test_loader = DataLoader(tar_test_data, batch_size, shuffle=True, num_workers=4)
+    src_loader = DataLoader(src_data, args.batch_size, shuffle=True, num_workers=4)
+    tar_loader = DataLoader(tar_data, args.batch_size, shuffle=True, num_workers=4)
+    tar_test_loader = DataLoader(tar_test_data, args.batch_size, shuffle=True, num_workers=4) 
 
+    # model
     model = Baseline_ResNet50(output_dim)
     model = model.to(device)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    criterion = torch.nn.CrossEntropyLoss()
+    # optimizer and criterion
+    if args.optimizer == "Adam":
+        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+    elif args.optimizer == "SGD":
+        optimizer = torch.optim.SGD(model.parameters(), lr=args.lr)
+    else:
+        raise ValueError("Optimizer not found!")
+    
+    if args.criterion == "CrossEntropyLoss":
+        criterion = torch.nn.CrossEntropyLoss()
+    else:
+        raise ValueError("Criterion not found!")
 
-    path = f"Baseline_experiment/Adam_b{batch_size}_lr{lr}"
+    # logging
+    path = f"Baseline_experiment/Adam_b{args.batch_size}_lr{args.lr}"
     file_name = f"{time.strftime('%Y-%m-%d-%H-%M', time.localtime())}"
-    # logging with permission of creating new folder
     if not os.path.exists(f"./log/{path}"):
         os.makedirs(f"./log/{path}")
     logging.basicConfig(filename=f'./log/{path}/{file_name}.log', level=logging.INFO)
-    logging.info(f"Train info: lr: {lr}, batch_size: {batch_size}, n_epoch: {n_epoch}, optimizer: {optimizer}, criterion: {criterion}")
+    logging.info(f"Train info: lr: {args.lr}, batch_size: {args.batch_size}, n_epoch: {args.n_epoch}, optimizer: {args.optimizer}, criterion: {args.criterion}")
 
-    train(model, src_loader, tar_loader, tar_test_loader, optimizer, criterion)
+    # train
+    train(model, src_loader, tar_loader, tar_test_loader, optimizer, criterion, args)

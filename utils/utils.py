@@ -1,7 +1,7 @@
 import numpy as np
 import random
 import torch
-import torchvision.transforms as T
+
 
 def set_random_seed(seed=0):
     # seed setting
@@ -29,21 +29,3 @@ class AverageMeter(object):
         self.sum += val * n
         self.count += n
         self.avg = self.sum / self.count
-
-
-transforms_src =  T.Compose(
-    [
-        T.Resize((224,224)),
-        T.RandomHorizontalFlip(),
-        T.ToTensor(),
-        T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-    ]
-)
-
-transforms_tar =  T.Compose(
-    [
-        T.Resize((224,224)),
-        T.ToTensor(),
-        T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-    ]
-)
