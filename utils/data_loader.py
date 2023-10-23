@@ -4,7 +4,7 @@ import torchvision.transforms as T
 from PIL import Image
 
 
-transforms_src =  T.Compose(
+transforms =  T.Compose(
     [
         T.Resize([288,288], interpolation=3),
         T.RandomHorizontalFlip(),
@@ -15,7 +15,7 @@ transforms_src =  T.Compose(
 )
 
 
-transforms_tar =  T.Compose(
+transforms_test =  T.Compose(
     [
         T.Resize((224,224)),
         T.ToTensor(),
@@ -26,10 +26,17 @@ transforms_tar =  T.Compose(
 def path_generator(type):
     paths = []
     labels = []
-    # root = "data/VehicleX/ReID Task/"
-    root = "data/VehicleX/Classification Task"
+    src_root = "data/VehicleX/Classification Task"
+    tar_root = "data/VehicleX/ReID Task/"
+
     # get the root path of the dataset
-    type_root = os.path.join(root, type)
+    if type == "train" or type == "test":
+        type_root = os.path.join(src_root, type)
+    elif type == "gallery" or type == "query":
+        type_root = os.path.join(tar_root, type)
+    else:
+        raise ValueError("type must be train, test, gallery or query")
+
     files = os.listdir(type_root)
     # loop each label
     for label in files:
