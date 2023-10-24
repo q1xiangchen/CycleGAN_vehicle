@@ -25,7 +25,6 @@ transforms_test =  T.Compose(
 
 def path_generator(type):
     paths = []
-    labels = []
     src_root = "data/VehicleX/Classification Task"
     tar_root = "data/VehicleX/ReID Task/"
 
@@ -42,27 +41,23 @@ def path_generator(type):
     for file_name in files:
         label_path = os.path.join(type_root, file_name)
         paths.append(label_path)
-        # labels.append(int(file_name.split("_")[0])-1) 
-        labels.append(0)
-    return paths, labels
+    return paths
 
 
 class VehicleDataset(Dataset):
     def __init__(self, type, transform=None):
-        paths, labels = path_generator(type)
+        paths = path_generator(type)
         self.paths = paths
-        self.labels = labels
         self.transform = transform
 
     def __len__(self):
-        return len(self.labels)
+        return len(self.paths)
 
     def __getitem__(self, idx):
         feature = Image.open(self.paths[idx])
-        label = self.labels[idx]
         if self.transform:
             feature = self.transform(feature)
-        return feature, label
+        return feature, "unlabelled"
     
 
 if __name__ == "__main__":

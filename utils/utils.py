@@ -105,16 +105,6 @@ def reorganize():
         except:
             pass
 
-        if key in ['train', 'test']:
-            dataset_dir = src_root
-        else:
-            dataset_dir = tar_root
-
-        os.symlink(os.path.abspath(os.path.join(dataset_dir, key)),
-                    os.path.join(dirs[key], '0'))
-
-    return dirs
-
 def save_checkpoint(state, save_path, is_best=False, max_keep=None):
     # save checkpoint
     torch.save(state, save_path)
@@ -159,3 +149,6 @@ def load_checkpoint(ckpt_dir_or_file, map_location=None, load_best=False):
     ckpt = torch.load(ckpt_path, map_location=map_location)
     print(' [*] Loading checkpoint from %s succeed!' % ckpt_path)
     return ckpt
+
+if __name__ == '__main__':
+    reorganize()

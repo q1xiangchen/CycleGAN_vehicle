@@ -1,15 +1,15 @@
 import os
-import torch
-import torch.nn as nn
-from torch.autograd import Variable
-from torch.utils.data import DataLoader
-import torchvision.utils as vutils
-from utils.logger import Logger
 import time
 import argparse
+import torch
+import torch.nn as nn
+from torch.utils.data import DataLoader
+from torch.autograd import Variable
+import torchvision.utils as vutils
 import models.cycle_gan_model as cycle_gan
+from utils.logger import Logger
 import utils.utils as utils
-
+import numpy
 from utils.data_loader import (
     VehicleDataset,
     transforms,
@@ -28,13 +28,13 @@ if __name__ == "__main__":
     # *****************************************************
 
     utils.set_random_seed(args.seed)
-
     use_tensorboard = 1
     start_time = f"{time.strftime('%Y-%m-%d-%H-%M', time.localtime())}"
+    model_name = f"lr_{args.lr}_batch_size_{args.batch_size}_n_epoch_{args.n_epoch}_{start_time}"
     if use_tensorboard:
         log_dir = './ckpt/cyclegan'
         utils.mkdir(log_dir)
-        Logger = Logger(log_dir)
+        Logger = Logger(log_dir, model_name)
 
     # data loader
     src_data = VehicleDataset("train", transform=transforms)
@@ -86,7 +86,7 @@ if __name__ == "__main__":
     """ run """
     loss = {}
     for epoch in range(start_epoch, args.n_epoch):
-        best_loss = 1e10
+        src_test_iter, tar_test_iter = iter(src_test_loader), iter(tar_test_loader)
         for i, (a_real, b_real) in enumerate(zip(src_loader, tar_loader)):
             if len(a_real[0]) < args.batch_size:
                 print("Batch size is not matched!")
@@ -113,7 +113,7 @@ if __name__ == "__main__":
             # gen losses
             a_f_dis = Dis_src(a_fake)
             b_f_dis = Dis_tar(b_fake)
-            r_label = utils.cuda(Variable(torch.ones(a_f_dis.size())))
+            r_label = torch.ones(a_f_dis.size()).cuda()
             a_gen_loss = MSE(a_f_dis, r_label)
             b_gen_loss = MSE(b_f_dis, r_label)
             
@@ -151,8 +151,8 @@ if __name__ == "__main__":
             a_f_dis = Dis_src(a_fake)
             b_r_dis = Dis_tar(b_real)
             b_f_dis = Dis_tar(b_fake)
-            r_label = utils.cuda(Variable(torch.ones(a_f_dis.size())))
-            f_label = utils.cuda(Variable(torch.zeros(a_f_dis.size())))
+            r_label = torch.ones(a_f_dis.size()).cuda()
+            f_label = torch.zeros(a_f_dis.size()).cuda()
 
             # d loss
             a_d_r_loss = MSE(a_r_dis, r_label)
@@ -178,21 +178,12 @@ if __name__ == "__main__":
                 if use_tensorboard:
                     for tag, value in loss.items():
                         Logger.scalar_summary(tag, value, i) 
-
-                # check if the best model
-                if loss['G/g_loss'] < best_loss:
-                    best_loss = loss['G/g_loss']
-                    best_model = True
-                else:
-                    best_model = False
             
             if (i + 1) % 100 == 0:
                 with torch.no_grad():
                     Gen_src.eval()
                     Gen_tar.eval()
-                    a_real_test = Variable(next(iter(src_test_loader))[0])
-                    b_real_test = Variable(next(iter(tar_test_loader))[0])
-                    a_real_test, b_real_test = utils.cuda([a_real_test, b_real_test])
+                    a_real_test, b_real_test = utils.cuda([next(src_test_iter)[0], next(tar_test_iter)[0]])
 
                     # generate fake images
                     a_fake_test = Gen_src(b_real_test)
@@ -219,5 +210,5 @@ if __name__ == "__main__":
                 'Dis_tar_opt': Dis_tar_opt.state_dict(),
                 'Gen_src_opt': Gen_src_opt.state_dict(),
                 'Gen_tar_opt': Gen_tar_opt.state_dict()},
-                '%s/%s_Epoch_%d.ckpt' % (ckpt_dir, start_time, epoch + 1), 
-                is_best=best_model, max_keep=4)
+                '%s/%s_Epoch_%d.ckpt' % (ckpt_dir, model_name, epoch + 1), 
+                max_keep=4)
