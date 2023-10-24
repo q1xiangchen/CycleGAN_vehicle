@@ -62,3 +62,19 @@ class VehicleDataset(Dataset):
         if self.transform:
             feature = self.transform(feature)
         return feature, label
+    
+
+if __name__ == "__main__":
+    # remove the file in the directory A with the same name as the directory B
+    def remove_same_name_file(A, B):
+        count = 0
+        files = os.listdir(A)
+        for file in files:
+            file_path = os.path.join(A, file)
+            if os.path.exists(os.path.join(B, file)):
+                os.remove(file_path)
+                count += 1
+        print(f"remove {count} files in directory {A}")
+        
+    remove_same_name_file("data/VehicleX/ReID Task/gallery", "data/VehicleX/ReID Task/query")
+    remove_same_name_file("data/VehicleX/Classification Task/train", "data/VehicleX/Classification Task/test")
