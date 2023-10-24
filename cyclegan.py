@@ -3,17 +3,15 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
-from torchvision.datasets import ImageFolder
 import torchvision.utils as vutils
-import logging
 from utils.logger import Logger
 import time
 import argparse
 import models.cycle_gan_model as cycle_gan
-import numpy as np
 import utils.utils as utils
 
 from utils.data_loader import (
+    VehicleDataset,
     transforms,
     transforms_test
 )
@@ -24,7 +22,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--batch_size", type=int, default=10)
-    parser.add_argument("--n_epoch", type=int, default=6)
+    parser.add_argument("--n_epoch", type=int, default=10)
     parser.add_argument("--lr", type=float, default=2e-4)
     args = parser.parse_args()
     # *****************************************************
@@ -39,11 +37,10 @@ if __name__ == "__main__":
         Logger = Logger(log_dir)
 
     # data loader
-    dataset_dirs = utils.reorganize()
-    src_data = ImageFolder(dataset_dirs["train"], transform=transforms)
-    src_test_data = ImageFolder(dataset_dirs["test"], transform=transforms_test)
-    tar_data = ImageFolder(dataset_dirs["gallery"], transform=transforms)
-    tar_test_data = ImageFolder(dataset_dirs["query"], transform=transforms_test)
+    src_data = VehicleDataset("train", transform=transforms)
+    src_test_data = VehicleDataset("test", transform=transforms_test)
+    tar_data = VehicleDataset("gallery", transform=transforms)
+    tar_test_data = VehicleDataset("query", transform=transforms_test)
 
     src_loader = DataLoader(src_data, batch_size=args.batch_size, shuffle=True, num_workers=0)
     src_test_loader = DataLoader(src_test_data, batch_size=1, shuffle=True, num_workers=0)
@@ -66,14 +63,6 @@ if __name__ == "__main__":
     Dis_tar_opt = torch.optim.Adam(Dis_tar.parameters(), lr=args.lr, betas=(0.5, 0.999))
     Gen_src_opt = torch.optim.Adam(Gen_src.parameters(), lr=args.lr, betas=(0.5, 0.999))
     Gen_tar_opt = torch.optim.Adam(Gen_tar.parameters(), lr=args.lr, betas=(0.5, 0.999))
-
-    # logging
-    # path = f"cyclegan_experiment/Adam_b{args.batch_size}_lr{args.lr}"
-    
-    # if not os.path.exists(f"./log/{path}"):
-    #     os.makedirs(f"./log/{path}")
-    # logging.basicConfig(filename=f'./log/{path}/{file_name}.log', level=logging.INFO)
-    # logging.info(f"Train info: lr: {args.lr}, batch_size: {args.batch_size}, n_epoch: {args.n_epoch}")
 
     """ load checkpoint """
     ckpt_dir = './ckpt/cyclegan'
@@ -186,8 +175,6 @@ if __name__ == "__main__":
             Dis_tar_opt.step()
 
             if (i + 1) % 10 == 0:
-                # logging.info("Epoch: %3d  Loaded: %5d/%5d" % (epoch, i + 1, min(len(src_loader), len(tar_loader))))
-                # logging.info("g_loss: %f  a_d_loss: %f   b_d_loss: %f" % (g_loss, a_d_loss, b_d_loss ))
                 if use_tensorboard:
                     for tag, value in loss.items():
                         Logger.scalar_summary(tag, value, i) 
@@ -199,7 +186,7 @@ if __name__ == "__main__":
                 else:
                     best_model = False
             
-            if (i + 1) % 50 == 0:
+            if (i + 1) % 100 == 0:
                 with torch.no_grad():
                     Gen_src.eval()
                     Gen_tar.eval()
@@ -233,4 +220,4 @@ if __name__ == "__main__":
                 'Gen_src_opt': Gen_src_opt.state_dict(),
                 'Gen_tar_opt': Gen_tar_opt.state_dict()},
                 '%s/%s_Epoch_%d.ckpt' % (ckpt_dir, start_time, epoch + 1), 
-                is_best=best_model,max_keep=4)
+                is_best=best_model, max_keep=4)

@@ -38,11 +38,12 @@ def path_generator(type):
         raise ValueError("type must be train, test, gallery or query")
 
     files = os.listdir(type_root)
-    # loop each label
-    for label in files:
-        label_path = os.path.join(type_root, label)
+    # loop each label 
+    for file_name in files:
+        label_path = os.path.join(type_root, file_name)
         paths.append(label_path)
-        labels.append(int(label.split("_")[0])-1) 
+        # labels.append(int(file_name.split("_")[0])-1) 
+        labels.append(0)
     return paths, labels
 
 
