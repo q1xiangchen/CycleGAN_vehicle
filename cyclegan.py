@@ -1,31 +1,29 @@
 import os
 import time
 import argparse
+
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.autograd import Variable
 import torchvision.utils as vutils
+import numpy as np
+
 import models.cycle_gan_model as cycle_gan
-from utils.logger import Logger
+from utils.data_loader import VehicleDataset, transforms, transforms_test
 import utils.utils as utils
-import numpy
-from utils.data_loader import (
-    VehicleDataset,
-    transforms,
-    transforms_test
-)
+from utils.logger import Logger
+
 
 if __name__ == "__main__":
-    # *****************************************************
-    # hyper parameters
+    # ***************** hyper parameters *****************
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--batch_size", type=int, default=10)
     parser.add_argument("--n_epoch", type=int, default=10)
     parser.add_argument("--lr", type=float, default=2e-4)
     args = parser.parse_args()
-    # *****************************************************
+    # ***************** hyper parameters *****************
 
     utils.set_random_seed(args.seed)
     use_tensorboard = 1
@@ -69,7 +67,7 @@ if __name__ == "__main__":
     utils.mkdir(ckpt_dir)
     try:
         ckpt = utils.load_checkpoint(ckpt_dir)
-        start_epoch = ckpt['epoch']
+        start_epoch = ckpt['epoch'] + 1
         Dis_src.load_state_dict(ckpt['Dis_src'])
         Dis_tar.load_state_dict(ckpt['Dis_tar'])
         Gen_src.load_state_dict(ckpt['Gen_src'])
@@ -177,7 +175,7 @@ if __name__ == "__main__":
             if (i + 1) % 10 == 0:
                 if use_tensorboard:
                     for tag, value in loss.items():
-                        Logger.scalar_summary(tag, value, i) 
+                        Logger.scalar_summary(tag, value, step)
             
             if (i + 1) % 100 == 0:
                 with torch.no_grad():
@@ -195,13 +193,13 @@ if __name__ == "__main__":
 
                     pic = (torch.cat([a_real_test, b_fake_test, a_rec_test, b_real_test, a_fake_test, b_rec_test], dim=0).data + 1) / 2.0
                     
-                    save_dir = './sample_images_while_training/cyclegan'
+                    save_dir = f"./sample_images_while_training/{model_name}/Epoch_{epoch}"
                     if not os.path.exists(save_dir):
                         os.makedirs(save_dir)
-                    vutils.save_image(pic, '%s/Epoch_%d_%dof%d.jpg' % (save_dir, epoch, i + 1, min(len(src_loader), len(tar_loader))), nrow=3)
+                    vutils.save_image(pic, '%s/%dof%d.jpg' % (save_dir, i + 1, min(len(src_loader), len(tar_loader))), nrow=3)
                 
         # save checkpoint
-        utils.save_checkpoint({'epoch': epoch + 1,
+        utils.save_checkpoint({'epoch': epoch,
                 'Dis_src': Dis_src.state_dict(),
                 'Dis_tar': Dis_tar.state_dict(),
                 'Gen_src': Gen_src.state_dict(),

@@ -16,29 +16,10 @@ def set_random_seed(seed=0):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-class AverageMeter(object):
-    """Computes and stores the average and current value"""
-
-    def __init__(self):
-        self.reset()
-
-    def reset(self):
-        self.val = 0
-        self.avg = 0
-        self.sum = 0
-        self.count = 0
-
-    def update(self, val, n=1):
-        self.val = val
-        self.sum += val * n
-        self.count += n
-        self.avg = self.sum / self.count
-
 
 def cuda(xs):
-    # print (torch.cuda.is_available())
+
     if torch.cuda.is_available():
-        #     print (type (xs))
         if not isinstance(xs, (list, tuple)):
             return xs.cuda()
         else:
@@ -46,7 +27,6 @@ def cuda(xs):
         
 
 class ItemPool(object):
-
     def __init__(self, max_num=50):
         self.max_num = max_num
         self.num = 0
@@ -88,22 +68,6 @@ def mkdir(paths):
             if not os.path.isdir(path):
                 os.makedirs(path)
 
-
-def reorganize():
-    src_root = "data/VehicleX/Classification Task"
-    tar_root = "data/VehicleX/ReID Task/"
-    dirs = {}
-    dirs['train'] = os.path.join(src_root, 'train')
-    dirs['test'] = os.path.join(src_root, 'test')
-    dirs['gallery'] = os.path.join(tar_root, 'gallery')
-    dirs['query'] = os.path.join(tar_root, 'query')
-    mkdir(dirs.values())
-
-    for key in dirs.keys():
-        try:
-            os.remove(os.path.join(dirs[key], '0'))
-        except:
-            pass
 
 def save_checkpoint(state, save_path, is_best=False, max_keep=None):
     # save checkpoint
@@ -149,6 +113,3 @@ def load_checkpoint(ckpt_dir_or_file, map_location=None, load_best=False):
     ckpt = torch.load(ckpt_path, map_location=map_location)
     print(' [*] Loading checkpoint from %s succeed!' % ckpt_path)
     return ckpt
-
-if __name__ == '__main__':
-    reorganize()
