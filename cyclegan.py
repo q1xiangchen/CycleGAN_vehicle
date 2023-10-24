@@ -23,7 +23,7 @@ if __name__ == "__main__":
     # hyper parameters
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--batch_size", type=int, default=3)
+    parser.add_argument("--batch_size", type=int, default=10)
     parser.add_argument("--n_epoch", type=int, default=6)
     parser.add_argument("--lr", type=float, default=2e-4)
     args = parser.parse_args()
@@ -220,7 +220,7 @@ if __name__ == "__main__":
                     save_dir = './sample_images_while_training/cyclegan'
                     if not os.path.exists(save_dir):
                         os.makedirs(save_dir)
-                    vutils.save_image(pic, '%s/Epoch_%d_%dof%d.jpg' % (save_dir, epoch, i + 1, min(len(src_test_loader), len(tar_test_loader))), nrow=3)
+                    vutils.save_image(pic, '%s/Epoch_%d_%dof%d.jpg' % (save_dir, epoch, i + 1, min(len(src_loader), len(tar_loader))), nrow=3)
                 
         # save checkpoint
         utils.save_checkpoint({'epoch': epoch + 1,
