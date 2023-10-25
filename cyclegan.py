@@ -20,7 +20,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--batch_size", type=int, default=10)
-    parser.add_argument("--n_epoch", type=int, default=10)
+    parser.add_argument("--n_epoch", type=int, default=8)
     parser.add_argument("--lr", type=float, default=2e-4)
     args = parser.parse_args()
     # ***************** hyper parameters *****************
@@ -63,7 +63,7 @@ if __name__ == "__main__":
     Gen_tar_opt = torch.optim.Adam(Gen_tar.parameters(), lr=args.lr, betas=(0.5, 0.999))
 
     """ load checkpoint """
-    ckpt_dir = './ckpt/cyclegan'
+    ckpt_dir = './ckpt/cyclegan/' + model_name
     utils.mkdir(ckpt_dir)
     try:
         ckpt = utils.load_checkpoint(ckpt_dir)
@@ -86,7 +86,7 @@ if __name__ == "__main__":
     for epoch in range(start_epoch, args.n_epoch):
         src_test_iter, tar_test_iter = iter(src_test_loader), iter(tar_test_loader)
         for i, (a_real, b_real) in enumerate(zip(src_loader, tar_loader)):
-            if len(a_real[0]) < args.batch_size:
+            if len(a_real[0]) < args.batch_size or len(b_real[0]) < args.batch_size:
                 print("Batch size is not matched!")
                 continue
 
@@ -193,7 +193,7 @@ if __name__ == "__main__":
 
                     pic = (torch.cat([a_real_test, b_fake_test, a_rec_test, b_real_test, a_fake_test, b_rec_test], dim=0).data + 1) / 2.0
                     
-                    save_dir = f"./sample_images_while_training/{model_name}/Epoch_{epoch}"
+                    save_dir = f"./sample_images_while_training/{model_name}/Epoch_{epoch+1}"
                     if not os.path.exists(save_dir):
                         os.makedirs(save_dir)
                     vutils.save_image(pic, '%s/%dof%d.jpg' % (save_dir, i + 1, min(len(src_loader), len(tar_loader))), nrow=3)
@@ -208,5 +208,5 @@ if __name__ == "__main__":
                 'Dis_tar_opt': Dis_tar_opt.state_dict(),
                 'Gen_src_opt': Gen_src_opt.state_dict(),
                 'Gen_tar_opt': Gen_tar_opt.state_dict()},
-                '%s/%s_Epoch_%d.ckpt' % (ckpt_dir, model_name, epoch + 1), 
+                '%s/Epoch_%d.ckpt' % (ckpt_dir, epoch + 1), 
                 max_keep=4)
