@@ -31,10 +31,10 @@ def path_generator(type):
     # get the root path of the dataset
     if type == "train" or type == "test":
         type_root = os.path.join(src_root, type)
-    elif type == "gallery" or type == "query":
+    elif type == "gallery" or type == "query" or type == "fake_images":
         type_root = os.path.join(tar_root, type)
     else:
-        raise ValueError("type must be train, test, gallery or query")
+        raise Exception("type error")
 
     files = os.listdir(type_root)
     # loop each label 
