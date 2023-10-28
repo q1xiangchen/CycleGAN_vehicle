@@ -32,8 +32,7 @@ class InceptionV3(nn.Module):
                  output_blocks=[DEFAULT_BLOCK_INDEX],
                  resize_input=True,
                  normalize_input=True,
-                 requires_grad=False,
-                 use_fid_inception=True):
+                 requires_grad=False):
         """Build pretrained InceptionV3
 
         Parameters
@@ -75,11 +74,7 @@ class InceptionV3(nn.Module):
             'Last possible output block index is 3'
 
         self.blocks = nn.ModuleList()
-
-        if use_fid_inception:
-            inception = fid_inception_v3()
-        else:
-            inception = models.inception_v3(weights="DEFAULT")
+        inception = models.inception_v3(weights="DEFAULT")
 
         # Block 0: input to maxpool1
         block0 = [

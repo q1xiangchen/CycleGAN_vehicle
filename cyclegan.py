@@ -7,7 +7,6 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.autograd import Variable
 import torchvision.utils as vutils
-import numpy as np
 
 import models.cycle_gan_model as cycle_gan
 from utils.data_loader import VehicleDataset, transforms, transforms_test
@@ -19,16 +18,21 @@ if __name__ == "__main__":
     # ***************** hyper parameters *****************
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--batch_size", type=int, default=10)
+    parser.add_argument("--batch_size", type=int, default=3)
     parser.add_argument("--n_epoch", type=int, default=8)
     parser.add_argument("--lr", type=float, default=2e-4)
+    parser.add_argument("--schedule", type=bool, default=False)
     args = parser.parse_args()
     # ***************** hyper parameters *****************
 
     utils.set_random_seed(args.seed)
     use_tensorboard = 1
     start_time = f"{time.strftime('%Y-%m-%d-%H-%M', time.localtime())}"
-    model_name = f"lr_{args.lr}_batch_size_{args.batch_size}_n_epoch_{args.n_epoch}_{start_time}"
+    if args.schedule:
+        model_name = f"schedule_lr_{args.lr}_batch_size_{args.batch_size}_n_epoch_{args.n_epoch}_{start_time}"
+    else:
+        model_name = f"lr_{args.lr}_batch_size_{args.batch_size}_n_epoch_{args.n_epoch}_{start_time}"
+
     if use_tensorboard:
         log_dir = './ckpt/cyclegan'
         utils.mkdir(log_dir)
@@ -62,6 +66,20 @@ if __name__ == "__main__":
     Gen_src_opt = torch.optim.Adam(Gen_src.parameters(), lr=args.lr, betas=(0.5, 0.999))
     Gen_tar_opt = torch.optim.Adam(Gen_tar.parameters(), lr=args.lr, betas=(0.5, 0.999))
 
+    # calculate the total steps
+    total_steps = args.n_epoch * min(len(src_loader), len(tar_loader))
+    step_size = total_steps // 4
+    gamma = 0.25
+    print("Total steps: %d, step size: %d, gamma: %f" % (total_steps, step_size, gamma))
+
+    # set scheduler
+    if args.schedule:
+        Dis_src_scheduler = torch.optim.lr_scheduler.StepLR(Dis_src_opt, step_size=step_size, gamma=gamma)
+        Dis_tar_scheduler = torch.optim.lr_scheduler.StepLR(Dis_tar_opt, step_size=step_size, gamma=gamma)
+        Gen_src_scheduler = torch.optim.lr_scheduler.StepLR(Gen_src_opt, step_size=step_size, gamma=gamma)
+        Gen_tar_scheduler = torch.optim.lr_scheduler.StepLR(Gen_tar_opt, step_size=step_size, gamma=gamma)
+        
+
     """ load checkpoint """
     ckpt_dir = './ckpt/cyclegan/' + model_name
     utils.mkdir(ckpt_dir)
@@ -84,13 +102,15 @@ if __name__ == "__main__":
     """ run """
     loss = {}
     for epoch in range(start_epoch, args.n_epoch):
+        print(f"Epoch {epoch+1}/{args.n_epoch}")
         src_test_iter, tar_test_iter = iter(src_test_loader), iter(tar_test_loader)
-        for i, (a_real, b_real) in enumerate(zip(src_loader, tar_loader)):
+        for i, (a_real, b_real) in enumerate(zip(src_loader, tar_loader)): 
             if len(a_real[0]) < args.batch_size or len(b_real[0]) < args.batch_size:
                 print("Batch size is not matched!")
                 continue
 
             step = epoch * min(len(src_loader), len(tar_loader)) + i + 1
+            loss['lr'] = Gen_src_opt.param_groups[0]['lr']
 
             # set train
             Gen_src.train()
@@ -171,6 +191,12 @@ if __name__ == "__main__":
             b_d_loss.backward()
             Dis_src_opt.step()
             Dis_tar_opt.step()
+
+            if args.schedule:
+                Dis_src_scheduler.step()
+                Dis_tar_scheduler.step()
+                Gen_src_scheduler.step()
+                Gen_tar_scheduler.step()
 
             if (i + 1) % 10 == 0:
                 if use_tensorboard:

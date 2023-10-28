@@ -40,14 +40,7 @@ import numpy as np
 import torch
 from scipy import linalg
 from torch.nn.functional import adaptive_avg_pool2d, adaptive_max_pool2d
-from scipy import misc
 from PIL import Image
-
-try:
-    from tqdm import tqdm
-except ImportError:
-    # If not tqdm is not available, provide a mock version of it
-    def tqdm(x): return x
 
 from models.inception import InceptionV3
 
@@ -64,20 +57,7 @@ parser.add_argument('-c', '--gpu', default='', type=str,
                     help='GPU to use (leave blank for CPU only)')
 
 
-
-def make_square(image, max_dim = 512):
-    max_dim = max(np.shape(image)[0], np.shape(image)[1])
-    h, w = image.shape[:2]
-    top_pad = (max_dim - h) // 2
-    bottom_pad = max_dim - h - top_pad
-    left_pad = (max_dim - w) // 2
-    right_pad = max_dim - w - left_pad
-    padding = [(top_pad, bottom_pad), (left_pad, right_pad), (0, 0)]
-    image = np.pad(image, padding, mode='constant', constant_values=0)
-    return image
-
-def get_activations(files, model, batch_size=50, dims=8192,
-                    cuda=False, verbose=False):
+def get_activations(files, model, batch_size=50, dims=8192):
     """Calculates the activations of the pool_3 layer for all images.
 
     Params:
@@ -113,9 +93,6 @@ def get_activations(files, model, batch_size=50, dims=8192,
     pred_arr = np.empty((n_used_imgs, dims))
 
     for i in range(n_batches):
-        if verbose:
-            print('\rPropagating batch %d/%d' % (i + 1, n_batches),
-                  end='', flush=True)
         start = i * batch_size
         end = start + batch_size
 
@@ -143,10 +120,6 @@ def get_activations(files, model, batch_size=50, dims=8192,
             pred = adaptive_avg_pool2d(pred, output_size=(1, 1))
 
         pred_arr[start:end] = pred.cpu().data.numpy().reshape(end - start, -1)
-
-    if verbose:
-        print(' done')
-
     return pred_arr
 
 
@@ -207,8 +180,7 @@ def calculate_frechet_distance(mu1, sigma1, mu2, sigma2, eps=1e-6):
             np.trace(sigma2) - 2 * tr_covmean)
 
 
-def calculate_activation_statistics(files, model, batch_size=50,
-                                    dims=8192, cuda=False, verbose=False):
+def calculate_activation_statistics(files, model, batch_size=50, dims=8192):
     """Calculation of the statistics used by the FID.
     Params:
     -- files       : List of image files paths
@@ -226,23 +198,17 @@ def calculate_activation_statistics(files, model, batch_size=50,
     -- sigma : The covariance matrix of the activations of the pool_3 layer of
                the inception model.
     """
-    act = get_activations(files, model, batch_size, dims, cuda, verbose)
+    act = get_activations(files, model, batch_size, dims)
     mu = np.mean(act, axis=0)
     sigma = np.cov(act, rowvar=False)
     return mu, sigma
 
 
-def _compute_statistics_of_path(path, model, batch_size, dims, cuda):
-    if path.endswith('.npz'):
-        f = np.load(path)
-        m, s = f['mu'][:], f['sigma'][:]
-        f.close()
-    else:
-        path = pathlib.Path(path)
-        files = list(path.glob('*.jpg')) + list(path.glob('*.png'))
-        files = files[:2000]
-        m, s = calculate_activation_statistics(files, model, batch_size,
-                                               dims, cuda) 
+def _compute_statistics_of_path(path, model, batch_size, dims):
+    path = pathlib.Path(path)
+    files = list(path.glob('*.jpg')) + list(path.glob('*.png'))
+    files = files[:2000]
+    m, s = calculate_activation_statistics(files, model, batch_size,dims) 
     return m, s
 
 
@@ -259,22 +225,11 @@ def calculate_fd_given_paths(paths):
     block_idx = InceptionV3.BLOCK_INDEX_BY_DIM[dims]
     model = InceptionV3([block_idx])
 
-    m1, s1 = _compute_statistics_of_path(paths[0], model, 16,
-                                         dims, cuda)
-    
-    npz_path = None
-    if not paths[0].endswith(".npz"):
-        if not paths[0].endswith('/'):
-            npz_path = paths[0] + ".npz"
-        else:
-            npz_path = paths[0][:-1] + ".npz"
-        np.savez(npz_path, mu = m1, sigma = s1)
-    m2, s2 = _compute_statistics_of_path(paths[1], model, 16,
-                                         dims, cuda)
+    m1, s1 = _compute_statistics_of_path(paths[0], model, 16, dims)
+    m2, s2 = _compute_statistics_of_path(paths[1], model, 16, dims)
 
     fd_value = calculate_frechet_distance(m1, s1, m2, s2)
-
-    return fd_value, npz_path
+    return fd_value
 
 
 if __name__ == '__main__':
