@@ -21,7 +21,7 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, default=12)
     parser.add_argument("--n_epoch", type=int, default=8)
     parser.add_argument("--lr", type=float, default=2e-4)
-    parser.add_argument("--schedule", type=bool, default=False)
+    parser.add_argument("--schedule", type=bool, default=True)
     args = parser.parse_args()
     # ***************** hyper parameters *****************
 
@@ -29,7 +29,7 @@ if __name__ == "__main__":
     use_tensorboard = 1
     start_time = f"{time.strftime('%Y-%m-%d-%H-%M', time.localtime())}"
     if args.schedule:
-        model_name = f"schedule_lr_{args.lr}_batch_size_{args.batch_size}_n_epoch_{args.n_epoch}_{start_time}"
+        model_name = f"schedule_lr_{args.lr}_batch_size_{args.batch_size}_n_epoch_{args.n_epoch}_{start_time}_SGD"
     else:
         model_name = f"lr_{args.lr}_batch_size_{args.batch_size}_n_epoch_{args.n_epoch}_{start_time}"
 
@@ -61,10 +61,10 @@ if __name__ == "__main__":
     L1 = nn.L1Loss()
     Dis_src, Dis_tar, Gen_src, Gen_tar = utils.cuda([Dis_src, Dis_tar, Gen_src, Gen_tar])
 
-    Dis_src_opt = torch.optim.Adam(Dis_src.parameters(), lr=args.lr, betas=(0.5, 0.999))
-    Dis_tar_opt = torch.optim.Adam(Dis_tar.parameters(), lr=args.lr, betas=(0.5, 0.999))
-    Gen_src_opt = torch.optim.Adam(Gen_src.parameters(), lr=args.lr, betas=(0.5, 0.999))
-    Gen_tar_opt = torch.optim.Adam(Gen_tar.parameters(), lr=args.lr, betas=(0.5, 0.999))
+    Dis_src_opt = torch.optim.SGD(Dis_src.parameters(), lr=args.lr, momentum=0.9)
+    Dis_tar_opt = torch.optim.SGD(Dis_src.parameters(), lr=args.lr, momentum=0.9)
+    Gen_src_opt = torch.optim.SGD(Dis_src.parameters(), lr=args.lr, momentum=0.9)
+    Gen_tar_opt = torch.optim.SGD(Dis_src.parameters(), lr=args.lr, momentum=0.9)
 
     # calculate the total steps
     total_steps = args.n_epoch * min(len(src_loader), len(tar_loader))
