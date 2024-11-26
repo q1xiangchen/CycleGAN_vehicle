@@ -1,6 +1,6 @@
 numpy==1.24.4
 Pillow==10.2.0
-torch==1.13.1+cu116
+torch==2.2.0
 torchvision==0.14.1+cu116
 
 --find-links https://download.pytorch.org/whl/cu116/torch_stable.html
